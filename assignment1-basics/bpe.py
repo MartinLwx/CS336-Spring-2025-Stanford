@@ -1,6 +1,7 @@
 import os
 import regex as re
 from collections import defaultdict, Counter
+from concurrent.futures import ProcessPoolExecutor
 
 from cs336_basics.pretokenization_example import find_chunk_boundaries
 
@@ -68,10 +69,14 @@ def train_bpe(
     with open(input_path, "rb") as f:
         boundaries = find_chunk_boundaries(f, os.cpu_count() * 4, "<|endoftext|>".encode("utf-8"))
 
-        for start, end in zip(boundaries[:-1], boundaries[1:]):
-            f.seek(start)
-            chunk: str = f.read(end - start).decode("utf-8", errors="ignore")
-            token_cnt |= pre_tokenization(chunk, special_token_pat)
+        with ProcessPoolExecutor() as executor:
+            chunks: list[str] = []
+            for start, end in zip(boundaries[:-1], boundaries[1:]):
+                f.seek(start)
+                chunks.append(f.read(end - start).decode("utf-8", errors="ignore"))
+
+            for res in executor.map(pre_tokenization, chunks, [special_token_pat] * len(chunks)):
+                token_cnt |= res
 
     # Generate merges
     while len(vocab) < vocab_size:
