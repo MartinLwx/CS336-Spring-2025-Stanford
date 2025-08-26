@@ -1,6 +1,6 @@
 import os
 import regex as re
-from collections import defaultdict, Counter
+from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 
 from cs336_basics.pretokenization_example import find_chunk_boundaries
@@ -59,7 +59,7 @@ def train_bpe(
 
     # Add special tokens to vocabulary
     for st in special_tokens:
-        vocab[len(vocab)] = bytes(st.encode("utf8"))
+        vocab[len(vocab)] = st.encode("utf8")
 
     merges: list[tuple[bytes, bytes]] = []
     special_token_pat = re.compile("|".join(map(re.escape, special_tokens)))
@@ -67,7 +67,9 @@ def train_bpe(
     # Pre-tokenization
     token_cnt: dict[tuple[bytes, ...], int] = {}
     with open(input_path, "rb") as f:
-        boundaries = find_chunk_boundaries(f, os.cpu_count() * 4, "<|endoftext|>".encode("utf-8"))
+        boundaries = find_chunk_boundaries(
+            f, (os.cpu_count() or 1) * 4, "<|endoftext|>".encode("utf8", errors="ignore")
+        )
 
         with ProcessPoolExecutor() as executor:
             chunks: list[str] = []
@@ -80,8 +82,8 @@ def train_bpe(
 
     # Generate merges
     while len(vocab) < vocab_size:
-        # Find the most frequent byte pair
-        pair_cnt: Counter = Counter()
+        # Find the most frequent bytjje pair
+        pair_cnt: dict[tuple[bytes, bytes], int] = defaultdict(int)
         bp_to_token_in_bytes: dict[tuple[bytes, bytes], set[tuple[bytes, ...]]] = defaultdict(set)
         max_pair_cnt: int = 0
         for token_in_bytes, cnt in token_cnt.items():
@@ -99,14 +101,19 @@ def train_bpe(
 
         # Re-merge the token bytes where best_bp appears
         for key in bp_to_token_in_bytes[best_bp]:
-            for i in range(len(key) - 1):
-                bp = (key[i], key[i + 1])
-                if bp == best_bp:
-                    new_key = key[:i] + (b"".join(best_bp),) + key[i + 2 :]
-                    token_cnt[new_key] = token_cnt[key]
+            new_key = []
+            i = 0
+            while i < len(key):
+                if i < len(key) - 1 and best_bp == (key[i], key[i + 1]):
+                    new_key.append(b"".join(best_bp))
+                    i += 2
+                else:
+                    new_key.append(key[i])
+                    i += 1
 
-        # Delete outdated key
-        for key in bp_to_token_in_bytes[best_bp]:
+            token_cnt[tuple(new_key)] = token_cnt[key]
+
+            # Delete outdated key
             del token_cnt[key]
 
     return vocab, merges
