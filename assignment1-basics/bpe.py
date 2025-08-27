@@ -2,11 +2,7 @@ import os
 import regex as re
 from collections import defaultdict
 
-from utils import GPT_PRETOKENIZE_PAT
-
-
-def make_bytes_pair(s: str) -> tuple[bytes, ...]:
-    return tuple(bytes([i]) for i in s.encode("utf8"))
+from utils import GPT_PRETOKENIZE_PAT, make_bytes_pair
 
 
 def pre_tokenization(s: str, special_regexp: re.Pattern) -> dict[tuple[bytes, ...], int]:
