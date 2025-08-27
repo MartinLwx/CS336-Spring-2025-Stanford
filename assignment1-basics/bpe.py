@@ -1,15 +1,13 @@
 import os
 import regex as re
 from collections import defaultdict
-from concurrent.futures import ProcessPoolExecutor
 
-from cs336_basics.pretokenization_example import find_chunk_boundaries
 
 GPT_PRETOKENIZE_PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
 
 def make_bytes_pair(s: str) -> tuple[bytes, ...]:
-    return tuple([bytes(i.encode("utf8")) for i in s])
+    return tuple(bytes([i]) for i in s.encode("utf8"))
 
 
 def pre_tokenization(s: str, special_regexp: re.Pattern) -> dict[tuple[bytes, ...], int]:
@@ -65,24 +63,13 @@ def train_bpe(
     special_token_pat = re.compile("|".join(map(re.escape, special_tokens)))
 
     # Pre-tokenization
-    token_cnt: dict[tuple[bytes, ...], int] = {}
+    token_cnt: dict[tuple[bytes, ...], int] = defaultdict(int)
     with open(input_path, "rb") as f:
-        boundaries = find_chunk_boundaries(
-            f, (os.cpu_count() or 1) * 4, "<|endoftext|>".encode("utf8", errors="ignore")
-        )
-
-        with ProcessPoolExecutor() as executor:
-            chunks: list[str] = []
-            for start, end in zip(boundaries[:-1], boundaries[1:]):
-                f.seek(start)
-                chunks.append(f.read(end - start).decode("utf-8", errors="ignore"))
-
-            for res in executor.map(pre_tokenization, chunks, [special_token_pat] * len(chunks)):
-                token_cnt |= res
+        token_cnt = pre_tokenization(f.read().decode("utf8"), special_token_pat)
 
     # Generate merges
     while len(vocab) < vocab_size:
-        # Find the most frequent bytjje pair
+        # Find the most frequent byte pair
         pair_cnt: dict[tuple[bytes, bytes], int] = defaultdict(int)
         bp_to_token_in_bytes: dict[tuple[bytes, bytes], set[tuple[bytes, ...]]] = defaultdict(set)
         max_pair_cnt: int = 0
@@ -97,7 +84,6 @@ def train_bpe(
         # Update merges and vocab
         merges.append(best_bp)
         vocab[len(vocab)] = b"".join(best_bp)
-        print(f"New Merge: {b''.join(best_bp)}")
 
         # Re-merge the token bytes where best_bp appears
         for key in bp_to_token_in_bytes[best_bp]:
@@ -120,6 +106,4 @@ def train_bpe(
 
 
 if __name__ == "__main__":
-    vocab, merges = train_bpe("./toy.txt", 1000, ["<|endoftext|>"])
-    print(merges)
-    # print({k: d for k, d in vocab.items()})
+    vocab, merges = train_bpe("./tests/fixtures/corpus.en", 500, ["<|endoftext|>"])
