@@ -2,8 +2,7 @@ import os
 import regex as re
 from collections import defaultdict
 
-
-GPT_PRETOKENIZE_PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+from utils import GPT_PRETOKENIZE_PAT
 
 
 def make_bytes_pair(s: str) -> tuple[bytes, ...]:
